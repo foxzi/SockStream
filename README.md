@@ -61,7 +61,7 @@ docker run -p 8080:8080 ghcr.io/foxzi/sockstream -target https://example.com
 ### Debian/Ubuntu
 
 ```bash
-wget https://github.com/OWNER/sockstream/releases/latest/download/sockstream_VERSION_amd64.deb
+wget https://github.com/foxzi/sockstream/releases/latest/download/sockstream_VERSION_amd64.deb
 sudo dpkg -i sockstream_VERSION_amd64.deb
 sudo systemctl enable --now sockstream
 ```
@@ -69,16 +69,16 @@ sudo systemctl enable --now sockstream
 ### RHEL/CentOS/Fedora
 
 ```bash
-wget https://github.com/OWNER/sockstream/releases/latest/download/sockstream-VERSION-1.x86_64.rpm
+wget https://github.com/foxzi/sockstream/releases/latest/download/sockstream-VERSION-1.x86_64.rpm
 sudo rpm -i sockstream-VERSION-1.x86_64.rpm
 sudo systemctl enable --now sockstream
 ```
 
 ### Binary
 
-Скачайте бинарник для вашей платформы со [страницы релизов](https://github.com/OWNER/sockstream/releases).
+Скачайте бинарник для вашей платформы со [страницы релизов](https://github.com/foxzi/sockstream/releases).
 
-*Download binary for your platform from [releases page](https://github.com/OWNER/sockstream/releases).*
+*Download binary for your platform from [releases page](https://github.com/foxzi/sockstream/releases).*
 
 ### From source
 
