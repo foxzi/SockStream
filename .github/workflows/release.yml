@@ -1,0 +1,309 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then
+            EXT=".exe"
+          fi
+          go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -o dist/sockstream-${{ matrix.goos }}-${{ matrix.goarch }}${EXT} \
+            ./cmd/sockstream
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sockstream-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+
+  package-deb:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux amd64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: sockstream-linux-amd64
+          path: dist/
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create deb package
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          PKG_ROOT=sockstream_${VERSION}_amd64
+
+          mkdir -p ${PKG_ROOT}/DEBIAN
+          mkdir -p ${PKG_ROOT}/usr/bin
+          mkdir -p ${PKG_ROOT}/etc/sockstream
+          mkdir -p ${PKG_ROOT}/lib/systemd/system
+
+          cp dist/sockstream-linux-amd64 ${PKG_ROOT}/usr/bin/sockstream
+          chmod +x ${PKG_ROOT}/usr/bin/sockstream
+
+          cp config.example.yaml ${PKG_ROOT}/etc/sockstream/config.yaml
+
+          cat > ${PKG_ROOT}/DEBIAN/control << EOF
+          Package: sockstream
+          Version: ${VERSION}
+          Section: net
+          Priority: optional
+          Architecture: amd64
+          Maintainer: SockStream Team
+          Description: Lightweight HTTP/HTTPS reverse proxy
+           SockStream is a reverse proxy with SOCKS5/HTTP proxy support,
+           header rewriting, CORS, and automatic proxy failover.
+          EOF
+
+          cat > ${PKG_ROOT}/lib/systemd/system/sockstream.service << EOF
+          [Unit]
+          Description=SockStream Reverse Proxy
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=nobody
+          Group=nogroup
+          ExecStart=/usr/bin/sockstream -config /etc/sockstream/config.yaml
+          Restart=on-failure
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          dpkg-deb --build ${PKG_ROOT}
+          mv ${PKG_ROOT}.deb dist/
+
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sockstream-deb
+          path: dist/*.deb
+
+  package-rpm:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Linux amd64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: sockstream-linux-amd64
+          path: dist/
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Install rpm tools
+        run: sudo apt-get update && sudo apt-get install -y rpm
+
+      - name: Create rpm package
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+
+          mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          mkdir -p rpmbuild/BUILDROOT/sockstream-${VERSION}-1.x86_64
+
+          mkdir -p rpmbuild/BUILDROOT/sockstream-${VERSION}-1.x86_64/usr/bin
+          mkdir -p rpmbuild/BUILDROOT/sockstream-${VERSION}-1.x86_64/etc/sockstream
+          mkdir -p rpmbuild/BUILDROOT/sockstream-${VERSION}-1.x86_64/usr/lib/systemd/system
+
+          cp dist/sockstream-linux-amd64 rpmbuild/BUILDROOT/sockstream-${VERSION}-1.x86_64/usr/bin/sockstream
+          chmod +x rpmbuild/BUILDROOT/sockstream-${VERSION}-1.x86_64/usr/bin/sockstream
+
+          cp config.example.yaml rpmbuild/BUILDROOT/sockstream-${VERSION}-1.x86_64/etc/sockstream/config.yaml
+
+          cat > rpmbuild/BUILDROOT/sockstream-${VERSION}-1.x86_64/usr/lib/systemd/system/sockstream.service << EOF
+          [Unit]
+          Description=SockStream Reverse Proxy
+          After=network.target
+
+          [Service]
+          Type=simple
+          User=nobody
+          Group=nobody
+          ExecStart=/usr/bin/sockstream -config /etc/sockstream/config.yaml
+          Restart=on-failure
+          RestartSec=5
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          cat > rpmbuild/SPECS/sockstream.spec << EOF
+          Name:           sockstream
+          Version:        ${VERSION}
+          Release:        1
+          Summary:        Lightweight HTTP/HTTPS reverse proxy
+          License:        MIT
+
+          %description
+          SockStream is a reverse proxy with SOCKS5/HTTP proxy support,
+          header rewriting, CORS, and automatic proxy failover.
+
+          %files
+          /usr/bin/sockstream
+          %config(noreplace) /etc/sockstream/config.yaml
+          /usr/lib/systemd/system/sockstream.service
+          EOF
+
+          rpmbuild --define "_topdir $(pwd)/rpmbuild" -bb rpmbuild/SPECS/sockstream.spec
+          cp rpmbuild/RPMS/x86_64/*.rpm dist/
+
+      - name: Upload rpm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sockstream-rpm
+          path: dist/*.rpm
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build, package-deb, package-rpm, docker]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+
+          # Binaries
+          for dir in artifacts/sockstream-linux-* artifacts/sockstream-darwin-* artifacts/sockstream-windows-*; do
+            if [ -d "$dir" ]; then
+              cp "$dir"/* release/ 2>/dev/null || true
+            fi
+          done
+
+          # Packages
+          cp artifacts/sockstream-deb/*.deb release/ 2>/dev/null || true
+          cp artifacts/sockstream-rpm/*.rpm release/ 2>/dev/null || true
+
+          # Create checksums
+          cd release
+          sha256sum * > SHA256SUMS
+
+      - name: Get version
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: SockStream v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## Installation
+
+            ### Binary
+            Download the appropriate binary for your platform from the assets below.
+
+            ### Docker
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:${{ steps.version.outputs.VERSION }}
+            ```
+
+            ### Debian/Ubuntu
+            ```bash
+            sudo dpkg -i sockstream_${{ steps.version.outputs.VERSION }}_amd64.deb
+            sudo systemctl enable --now sockstream
+            ```
+
+            ### RHEL/CentOS/Fedora
+            ```bash
+            sudo rpm -i sockstream-${{ steps.version.outputs.VERSION }}-1.x86_64.rpm
+            sudo systemctl enable --now sockstream
+            ```
+
+            ## Changes
+            See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          files: release/*
+          draft: false
+          prerelease: false

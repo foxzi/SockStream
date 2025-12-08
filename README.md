@@ -49,14 +49,51 @@
 | Access Control | IP filtering (allow/block lists, IPv4/IPv6) |
 | TLS | Certificate support and automatic ACME (Let's Encrypt) |
 
-## Быстрый старт
+## Установка / Installation
+
+### Docker
+
+```bash
+docker pull ghcr.io/foxzi/sockstream:latest
+docker run -p 8080:8080 ghcr.io/foxzi/sockstream -target https://example.com
+```
+
+### Debian/Ubuntu
+
+```bash
+wget https://github.com/OWNER/sockstream/releases/latest/download/sockstream_VERSION_amd64.deb
+sudo dpkg -i sockstream_VERSION_amd64.deb
+sudo systemctl enable --now sockstream
+```
+
+### RHEL/CentOS/Fedora
+
+```bash
+wget https://github.com/OWNER/sockstream/releases/latest/download/sockstream-VERSION-1.x86_64.rpm
+sudo rpm -i sockstream-VERSION-1.x86_64.rpm
+sudo systemctl enable --now sockstream
+```
+
+### Binary
+
+Скачайте бинарник для вашей платформы со [страницы релизов](https://github.com/OWNER/sockstream/releases).
+
+*Download binary for your platform from [releases page](https://github.com/OWNER/sockstream/releases).*
+
+### From source
 
 ```bash
 go build ./cmd/sockstream
 ./sockstream -config config.example.yaml
 ```
 
-Статус: `GET /healthz` возвращает `200 ok`.
+## Быстрый старт / Quick start
+
+```bash
+./sockstream -target https://example.com
+```
+
+Статус / Health check: `GET /healthz` возвращает `200 ok`.
 
 ## Конфигурация
 
