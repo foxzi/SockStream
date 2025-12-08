@@ -1,7 +1,7 @@
 package proxy
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -11,7 +11,7 @@ import (
 )
 
 // NewReverseProxy constructs a reverse proxy with header rewrites and custom transport.
-func NewReverseProxy(target *url.URL, cfg config.Config, transport http.RoundTripper, logger *log.Logger) *httputil.ReverseProxy {
+func NewReverseProxy(target *url.URL, cfg config.Config, transport http.RoundTripper, logger *slog.Logger) *httputil.ReverseProxy {
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	if transport != nil {
 		proxy.Transport = transport
@@ -28,7 +28,7 @@ func NewReverseProxy(target *url.URL, cfg config.Config, transport http.RoundTri
 	}
 
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		logger.Printf("proxy error: %v", err)
+		logger.Error("proxy error", "error", err, "url", r.URL.String())
 		http.Error(w, "proxy error", http.StatusBadGateway)
 	}
 

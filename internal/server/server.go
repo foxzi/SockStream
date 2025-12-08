@@ -2,7 +2,7 @@ package server
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -14,11 +14,11 @@ import (
 
 type Server struct {
 	cfg     config.Config
-	logger  *log.Logger
+	logger  *slog.Logger
 	handler http.Handler
 }
 
-func New(cfg config.Config, logger *log.Logger, proxyHandler http.Handler) (*Server, error) {
+func New(cfg config.Config, logger *slog.Logger, proxyHandler http.Handler) (*Server, error) {
 	ac, err := NewAccessControl(cfg.Access)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (s *Server) Start(ctx context.Context) error {
 		}()
 		go func() {
 			if err := acmeSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				s.logger.Printf("acme http server error: %v", err)
+				s.logger.Error("acme http server error", "error", err)
 			}
 		}()
 	}
@@ -117,10 +117,10 @@ func chain(h http.Handler, m ...middleware) http.Handler {
 	return h
 }
 
-func shutdownWithLog(srv *http.Server, logger *log.Logger) {
+func shutdownWithLog(srv *http.Server, logger *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(ctx); err != nil && err != context.Canceled {
-		logger.Printf("shutdown: %v", err)
+		logger.Error("shutdown error", "error", err)
 	}
 }

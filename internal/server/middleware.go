@@ -2,7 +2,7 @@ package server
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -12,13 +12,18 @@ import (
 
 type middleware func(http.Handler) http.Handler
 
-func loggingMiddleware(logger *log.Logger) middleware {
+func loggingMiddleware(logger *slog.Logger) middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 			start := time.Now()
 			next.ServeHTTP(rec, r)
-			logger.Printf("%s %s %d %s", r.Method, r.URL.String(), rec.status, time.Since(start))
+			logger.Info("request",
+				"method", r.Method,
+				"url", r.URL.String(),
+				"status", rec.status,
+				"duration", time.Since(start),
+			)
 		})
 	}
 }
