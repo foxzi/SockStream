@@ -1,14 +1,17 @@
-FROM golang:1.21 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.21 AS builder
+
+ARG TARGETOS
+ARG TARGETARCH
 
 WORKDIR /app
 
-COPY go.mod ./
-# Download deps early for better caching. go.sum may be created during build.
+COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/sockstream ./cmd/sockstream
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -ldflags="-s -w" -o /out/sockstream ./cmd/sockstream
 
 FROM gcr.io/distroless/static:nonroot
 
