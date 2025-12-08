@@ -2,6 +2,8 @@
 
 Легковесный HTTP/HTTPS reverse proxy с поддержкой SOCKS5 и HTTP(S) прокси, переписывания заголовков и CORS.
 
+*Lightweight HTTP/HTTPS reverse proxy with SOCKS5 and HTTP(S) proxy support, header rewriting and CORS.*
+
 ## Быстрый старт
 
 ```bash
@@ -61,5 +63,10 @@ docker run -p 8080:8080 sockstream -target https://example.org
 - HTTP/HTTPS сервер с CORS, логированием и ACL по IP
 - Проксирование HTTP/WebSocket к целевому хосту с перепиской Host/Origin/Referer и добавлением заголовков
 - Исходящие соединения через SOCKS5 или HTTP(S) прокси
-- TLS: ручные сертификаты или ACME/Let’s Encrypt (HTTP-01)
+- TLS: ручные сертификаты или ACME/Let's Encrypt (HTTP-01)
 - Один бинарник без внешних зависимостей времени выполнения
+
+## Документация / Documentation
+
+- [Конфигурация (RU)](docs/configuration.md)
+- [Configuration (EN)](docs/configuration-en.md)
