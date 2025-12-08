@@ -61,6 +61,17 @@ func main() {
 		logger.Error("failed to create proxy pool", "error", err)
 		os.Exit(1)
 	}
+	proxyPool.SetLogger(logger)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// Start health check for proxy pool
+	if len(cfg.Proxy.URLs) > 0 || (cfg.Proxy.Type != "" && cfg.Proxy.Type != "direct") {
+		logger.Info("starting proxy health check", "count", proxyPool.Size(), "rotation", cfg.Proxy.Rotation)
+		proxyPool.StartHealthCheck(ctx)
+		defer proxyPool.Stop()
+	}
 
 	reverseProxy := proxy.NewReverseProxy(targetURL, cfg, proxyPool, logger)
 	srv, err := server.New(cfg, logger, reverseProxy)
@@ -69,12 +80,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
 	logger.Info("starting server", "listen", cfg.Listen, "target", cfg.Target)
 	if len(cfg.Proxy.URLs) > 0 {
-		logger.Info("using proxy pool", "count", proxyPool.Size(), "rotation", cfg.Proxy.Rotation)
+		logger.Info("using proxy pool", "count", proxyPool.Size(), "healthy", proxyPool.HealthyCount())
 	} else if cfg.Proxy.Type != "" && cfg.Proxy.Type != "direct" {
 		logger.Info("using upstream proxy", "type", cfg.Proxy.Type, "address", cfg.Proxy.Address)
 	}

@@ -244,16 +244,15 @@ func TestProxyPool_RoundRobin(t *testing.T) {
 	}
 
 	// Verify round-robin by checking that transports rotate
-	seen := make(map[int]bool)
 	for i := 0; i < 6; i++ {
-		tr := pool.nextTransport()
-		// Each transport should be used in order
+		tr, err := pool.nextTransport()
+		if err != nil {
+			t.Errorf("nextTransport() error = %v", err)
+		}
 		if tr == nil {
 			t.Error("nextTransport() returned nil")
 		}
 	}
-	// After 6 calls with 3 proxies, we should have rotated through all
-	_ = seen
 }
 
 func TestProxyPool_Random(t *testing.T) {
@@ -273,7 +272,10 @@ func TestProxyPool_Random(t *testing.T) {
 
 	// Just verify random doesn't panic
 	for i := 0; i < 10; i++ {
-		tr := pool.nextTransport()
+		tr, err := pool.nextTransport()
+		if err != nil {
+			t.Errorf("nextTransport() error = %v", err)
+		}
 		if tr == nil {
 			t.Error("nextTransport() returned nil")
 		}
@@ -291,11 +293,133 @@ func TestProxyPool_SingleTransport(t *testing.T) {
 	}
 
 	// With single proxy, same transport should always be returned
-	first := pool.nextTransport()
+	first, err := pool.nextTransport()
+	if err != nil {
+		t.Fatalf("nextTransport() error = %v", err)
+	}
 	for i := 0; i < 5; i++ {
-		tr := pool.nextTransport()
+		tr, err := pool.nextTransport()
+		if err != nil {
+			t.Errorf("nextTransport() error = %v", err)
+		}
 		if tr != first {
 			t.Error("Single-proxy pool should always return same transport")
 		}
+	}
+}
+
+func TestProxyPool_HealthyCount(t *testing.T) {
+	cfg := config.ProxyConfig{
+		URLs: []string{
+			"http://proxy1:8080",
+			"http://proxy2:8080",
+			"http://proxy3:8080",
+		},
+	}
+
+	pool, err := NewProxyPool(cfg)
+	if err != nil {
+		t.Fatalf("NewProxyPool() error = %v", err)
+	}
+
+	// All proxies should be healthy by default
+	if pool.HealthyCount() != 3 {
+		t.Errorf("HealthyCount() = %d, want 3", pool.HealthyCount())
+	}
+
+	// Mark one as unhealthy
+	pool.entries[0].setHealthy(false, "test error")
+	if pool.HealthyCount() != 2 {
+		t.Errorf("HealthyCount() = %d, want 2", pool.HealthyCount())
+	}
+}
+
+func TestProxyPool_GetStatus(t *testing.T) {
+	cfg := config.ProxyConfig{
+		URLs: []string{
+			"http://proxy1:8080",
+			"socks5://proxy2:1080",
+		},
+	}
+
+	pool, err := NewProxyPool(cfg)
+	if err != nil {
+		t.Fatalf("NewProxyPool() error = %v", err)
+	}
+
+	statuses := pool.GetStatus()
+	if len(statuses) != 2 {
+		t.Fatalf("GetStatus() returned %d entries, want 2", len(statuses))
+	}
+
+	// Check first proxy status
+	if statuses[0].Address != "http://proxy1:8080" {
+		t.Errorf("Address = %s, want http://proxy1:8080", statuses[0].Address)
+	}
+	if !statuses[0].Healthy {
+		t.Error("Expected first proxy to be healthy")
+	}
+
+	// Check second proxy status
+	if statuses[1].Address != "socks5://proxy2:1080" {
+		t.Errorf("Address = %s, want socks5://proxy2:1080", statuses[1].Address)
+	}
+}
+
+func TestProxyPool_UnhealthySkipped(t *testing.T) {
+	cfg := config.ProxyConfig{
+		URLs: []string{
+			"http://proxy1:8080",
+			"http://proxy2:8080",
+		},
+		Rotation: "round-robin",
+	}
+
+	pool, err := NewProxyPool(cfg)
+	if err != nil {
+		t.Fatalf("NewProxyPool() error = %v", err)
+	}
+
+	// Mark first proxy as unhealthy
+	pool.entries[0].setHealthy(false, "test error")
+
+	// Should only get the healthy proxy
+	for i := 0; i < 5; i++ {
+		tr, err := pool.nextTransport()
+		if err != nil {
+			t.Errorf("nextTransport() error = %v", err)
+		}
+		// Should always get the second (healthy) proxy's transport
+		if tr != pool.entries[1].transport {
+			t.Error("Expected to get healthy proxy transport")
+		}
+	}
+}
+
+func TestProxyPool_AllUnhealthyFallback(t *testing.T) {
+	cfg := config.ProxyConfig{
+		URLs: []string{
+			"http://proxy1:8080",
+			"http://proxy2:8080",
+		},
+	}
+
+	pool, err := NewProxyPool(cfg)
+	if err != nil {
+		t.Fatalf("NewProxyPool() error = %v", err)
+	}
+
+	// Mark all proxies as unhealthy
+	for _, e := range pool.entries {
+		e.setHealthy(false, "test error")
+	}
+
+	// Should still return a transport (fallback behavior)
+	tr, err := pool.nextTransport()
+	if err != nil {
+		t.Errorf("nextTransport() error = %v", err)
+	}
+	if tr == nil {
+		t.Error("Expected fallback transport when all unhealthy")
 	}
 }
