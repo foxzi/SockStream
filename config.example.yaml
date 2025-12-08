@@ -29,6 +29,7 @@ cors:
 access:
   allow:
     - 0.0.0.0/0
+    - ::/0
 
 headers:
   rewrite_host: true
