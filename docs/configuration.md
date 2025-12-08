@@ -185,6 +185,51 @@ export SOCKSTREAM_PROXY_ROTATION="random"
 - Поддерживаются IPv4 и IPv6 CIDR
 - IP клиента извлекается из `X-Forwarded-For` или `RemoteAddr`
 
+## Заголовки (Headers)
+
+Настройка перезаписи и добавления HTTP-заголовков при проксировании.
+
+### Перезапись заголовков
+
+| Параметр | Описание |
+|----------|----------|
+| `rewrite_host` | Заменяет заголовок `Host` на хост из `target` |
+| `rewrite_origin` | Заменяет заголовок `Origin` на URL из `target` |
+| `rewrite_referer` | Заменяет заголовок `Referer` на URL из `target` |
+
+**Зачем это нужно:** Многие серверы проверяют эти заголовки для защиты от несанкционированного доступа. Если `Host` не совпадает с ожидаемым доменом — сервер может отклонить запрос. `Origin` и `Referer` проверяются для защиты от CSRF-атак.
+
+### Пример работы
+
+```
+# rewrite_host: true
+Запрос клиента:    Host: localhost:8080
+После перезаписи:  Host: target.example.com
+
+# rewrite_origin: true
+Запрос клиента:    Origin: http://localhost:8080
+После перезаписи:  Origin: https://target.example.com
+
+# rewrite_referer: true
+Запрос клиента:    Referer: http://localhost:8080/page
+После перезаписи:  Referer: https://target.example.com
+```
+
+### Добавление заголовков
+
+Секция `add` позволяет добавить произвольные заголовки к каждому запросу:
+
+```yaml
+headers:
+  rewrite_host: true
+  rewrite_origin: true
+  rewrite_referer: true
+  add:
+    X-Forwarded-Proto: https
+    X-Custom-Header: my-value
+    Authorization: Bearer token123
+```
+
 ## TLS
 
 ### Ручные сертификаты

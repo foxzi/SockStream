@@ -185,6 +185,51 @@ export SOCKSTREAM_PROXY_ROTATION="random"
 - IPv4 and IPv6 CIDRs are supported
 - Client IP is extracted from `X-Forwarded-For` or `RemoteAddr`
 
+## Headers
+
+Configuration for rewriting and adding HTTP headers during proxying.
+
+### Header Rewriting
+
+| Parameter | Description |
+|-----------|-------------|
+| `rewrite_host` | Replaces `Host` header with host from `target` |
+| `rewrite_origin` | Replaces `Origin` header with URL from `target` |
+| `rewrite_referer` | Replaces `Referer` header with URL from `target` |
+
+**Why is this needed:** Many servers check these headers for security. If `Host` doesn't match the expected domain, the server may reject the request or redirect. `Origin` and `Referer` are checked for CSRF protection.
+
+### Example
+
+```
+# rewrite_host: true
+Client request:    Host: localhost:8080
+After rewrite:     Host: target.example.com
+
+# rewrite_origin: true
+Client request:    Origin: http://localhost:8080
+After rewrite:     Origin: https://target.example.com
+
+# rewrite_referer: true
+Client request:    Referer: http://localhost:8080/page
+After rewrite:     Referer: https://target.example.com
+```
+
+### Adding Headers
+
+The `add` section allows adding custom headers to every request:
+
+```yaml
+headers:
+  rewrite_host: true
+  rewrite_origin: true
+  rewrite_referer: true
+  add:
+    X-Forwarded-Proto: https
+    X-Custom-Header: my-value
+    Authorization: Bearer token123
+```
+
 ## TLS
 
 ### Manual Certificates
