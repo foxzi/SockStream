@@ -391,3 +391,249 @@ target: ""
 		t.Error("Load() expected validation error for missing target")
 	}
 }
+
+func TestParseProxyURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		wantType string
+		wantAddr string
+		wantUser string
+		wantPass string
+		wantErr  bool
+	}{
+		{
+			name:     "socks5 with auth",
+			url:      "socks5://user:pass@127.0.0.1:1080",
+			wantType: "socks5",
+			wantAddr: "127.0.0.1:1080",
+			wantUser: "user",
+			wantPass: "pass",
+			wantErr:  false,
+		},
+		{
+			name:     "socks5 without auth",
+			url:      "socks5://proxy.example.com:1080",
+			wantType: "socks5",
+			wantAddr: "proxy.example.com:1080",
+			wantUser: "",
+			wantPass: "",
+			wantErr:  false,
+		},
+		{
+			name:     "http proxy with auth",
+			url:      "http://admin:secret@proxy.local:8080",
+			wantType: "http",
+			wantAddr: "proxy.local:8080",
+			wantUser: "admin",
+			wantPass: "secret",
+			wantErr:  false,
+		},
+		{
+			name:     "https proxy",
+			url:      "https://secure-proxy.com:443",
+			wantType: "https",
+			wantAddr: "secure-proxy.com:443",
+			wantUser: "",
+			wantPass: "",
+			wantErr:  false,
+		},
+		{
+			name:     "password with special chars",
+			url:      "socks5://user:p%40ss%3Aword@host:1080",
+			wantType: "socks5",
+			wantAddr: "host:1080",
+			wantUser: "user",
+			wantPass: "p@ss:word",
+			wantErr:  false,
+		},
+		{
+			name:    "unsupported scheme",
+			url:     "ftp://proxy:21",
+			wantErr: true,
+		},
+		{
+			name:    "invalid URL",
+			url:     "://invalid",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, err := ParseProxyURL(tt.url)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseProxyURL() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
+			if p.Type != tt.wantType {
+				t.Errorf("Type = %q, want %q", p.Type, tt.wantType)
+			}
+			if p.Address != tt.wantAddr {
+				t.Errorf("Address = %q, want %q", p.Address, tt.wantAddr)
+			}
+			if p.Username != tt.wantUser {
+				t.Errorf("Username = %q, want %q", p.Username, tt.wantUser)
+			}
+			if p.Password != tt.wantPass {
+				t.Errorf("Password = %q, want %q", p.Password, tt.wantPass)
+			}
+		})
+	}
+}
+
+func TestProxyConfig_GetProxies(t *testing.T) {
+	tests := []struct {
+		name      string
+		cfg       ProxyConfig
+		wantCount int
+		wantErr   bool
+	}{
+		{
+			name:      "empty config",
+			cfg:       ProxyConfig{},
+			wantCount: 0,
+			wantErr:   false,
+		},
+		{
+			name: "legacy config",
+			cfg: ProxyConfig{
+				Type:    "socks5",
+				Address: "127.0.0.1:1080",
+				Auth:    ProxyAuth{Username: "user", Password: "pass"},
+			},
+			wantCount: 1,
+			wantErr:   false,
+		},
+		{
+			name: "URL list",
+			cfg: ProxyConfig{
+				URLs: []string{
+					"socks5://proxy1:1080",
+					"http://proxy2:8080",
+					"https://proxy3:443",
+				},
+			},
+			wantCount: 3,
+			wantErr:   false,
+		},
+		{
+			name: "URL list takes precedence over legacy",
+			cfg: ProxyConfig{
+				Type:    "socks5",
+				Address: "legacy:1080",
+				URLs: []string{
+					"http://new1:8080",
+					"http://new2:8080",
+				},
+			},
+			wantCount: 2,
+			wantErr:   false,
+		},
+		{
+			name: "invalid URL in list",
+			cfg: ProxyConfig{
+				URLs: []string{
+					"socks5://valid:1080",
+					"ftp://invalid:21",
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "direct type returns empty",
+			cfg: ProxyConfig{
+				Type:    "direct",
+				Address: "ignored",
+			},
+			wantCount: 0,
+			wantErr:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proxies, err := tt.cfg.GetProxies()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetProxies() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
+			if len(proxies) != tt.wantCount {
+				t.Errorf("GetProxies() count = %d, want %d", len(proxies), tt.wantCount)
+			}
+		})
+	}
+}
+
+func TestConfig_Validate_ProxyURLs(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     Config
+		wantErr bool
+	}{
+		{
+			name: "valid proxy URLs",
+			cfg: Config{
+				Listen: "0.0.0.0:8080",
+				Target: "https://example.com",
+				Proxy: ProxyConfig{
+					URLs: []string{
+						"socks5://proxy1:1080",
+						"http://proxy2:8080",
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid proxy URL",
+			cfg: Config{
+				Listen: "0.0.0.0:8080",
+				Target: "https://example.com",
+				Proxy: ProxyConfig{
+					URLs: []string{
+						"ftp://invalid:21",
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "valid rotation",
+			cfg: Config{
+				Listen: "0.0.0.0:8080",
+				Target: "https://example.com",
+				Proxy: ProxyConfig{
+					Rotation: "random",
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid rotation",
+			cfg: Config{
+				Listen: "0.0.0.0:8080",
+				Target: "https://example.com",
+				Proxy: ProxyConfig{
+					Rotation: "invalid",
+				},
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}

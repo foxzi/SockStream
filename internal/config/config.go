@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,11 +30,77 @@ type ProxyConfig struct {
 	Address  string        `yaml:"address" toml:"address"`
 	Auth     ProxyAuth     `yaml:"auth" toml:"auth"`
 	Timeouts TimeoutConfig `yaml:"timeouts" toml:"timeouts"`
+	// URLs is a list of proxy URLs in format: socks5://user:pass@host:port or http://user:pass@host:port
+	URLs     []string      `yaml:"urls" toml:"urls"`
+	// Rotation strategy: "round-robin" (default), "random"
+	Rotation string        `yaml:"rotation" toml:"rotation"`
 }
 
 type ProxyAuth struct {
 	Username string `yaml:"username" toml:"username"`
 	Password string `yaml:"password" toml:"password"`
+}
+
+// ParsedProxy represents a parsed proxy URL
+type ParsedProxy struct {
+	Type     string
+	Address  string
+	Username string
+	Password string
+}
+
+// ParseProxyURL parses a proxy URL like socks5://user:pass@host:port
+func ParseProxyURL(rawURL string) (ParsedProxy, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ParsedProxy{}, fmt.Errorf("invalid proxy URL: %w", err)
+	}
+
+	proxyType := strings.ToLower(u.Scheme)
+	switch proxyType {
+	case "socks5", "http", "https":
+	default:
+		return ParsedProxy{}, fmt.Errorf("unsupported proxy scheme: %s", proxyType)
+	}
+
+	p := ParsedProxy{
+		Type:    proxyType,
+		Address: u.Host,
+	}
+
+	if u.User != nil {
+		p.Username = u.User.Username()
+		p.Password, _ = u.User.Password()
+	}
+
+	return p, nil
+}
+
+// GetProxies returns list of parsed proxies from config
+func (c ProxyConfig) GetProxies() ([]ParsedProxy, error) {
+	var proxies []ParsedProxy
+
+	// First, check URL list
+	for _, rawURL := range c.URLs {
+		p, err := ParseProxyURL(rawURL)
+		if err != nil {
+			return nil, err
+		}
+		p.Type = strings.ToLower(p.Type)
+		proxies = append(proxies, p)
+	}
+
+	// If no URLs, use legacy config
+	if len(proxies) == 0 && c.Type != "" && c.Type != "direct" {
+		proxies = append(proxies, ParsedProxy{
+			Type:     strings.ToLower(c.Type),
+			Address:  c.Address,
+			Username: c.Auth.Username,
+			Password: c.Auth.Password,
+		})
+	}
+
+	return proxies, nil
 }
 
 type TimeoutConfig struct {
@@ -172,9 +239,20 @@ func (c Config) Validate() error {
 		return errors.New("listen is required")
 	}
 	switch strings.ToLower(c.Proxy.Type) {
-	case "", "socks5", "http", "https":
+	case "", "direct", "socks5", "http", "https":
 	default:
 		return fmt.Errorf("unsupported proxy type: %s", c.Proxy.Type)
+	}
+	// Validate proxy URLs
+	for _, rawURL := range c.Proxy.URLs {
+		if _, err := ParseProxyURL(rawURL); err != nil {
+			return fmt.Errorf("invalid proxy URL %q: %w", rawURL, err)
+		}
+	}
+	switch strings.ToLower(c.Proxy.Rotation) {
+	case "", "round-robin", "random":
+	default:
+		return fmt.Errorf("unsupported proxy rotation: %s", c.Proxy.Rotation)
 	}
 	if c.TLS.ACME.Enabled && c.TLS.ACME.Domain == "" {
 		return errors.New("acme enabled but domain is empty")
@@ -291,6 +369,12 @@ func applyEnv(cfg *Config, prefix string) {
 	}
 	if v, ok := get("PROXY_PASSWORD"); ok {
 		cfg.Proxy.Auth.Password = v
+	}
+	if v, ok := get("PROXY_URLS"); ok {
+		cfg.Proxy.URLs = splitAndClean(v)
+	}
+	if v, ok := get("PROXY_ROTATION"); ok {
+		cfg.Proxy.Rotation = v
 	}
 	if v, ok := get("ALLOW_IPS"); ok {
 		cfg.Access.AllowCIDRs = splitAndClean(v)
