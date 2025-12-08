@@ -4,6 +4,51 @@
 
 *Lightweight HTTP/HTTPS reverse proxy with SOCKS5 and HTTP(S) proxy support, header rewriting and CORS.*
 
+## Как это работает / How it works
+
+```
+                                    ┌─────────────────────────────────────────┐
+                                    │            Proxy Pool                   │
+                                    │  ┌───────┐ ┌───────┐ ┌───────┐         │
+                                    │  │Proxy 1│ │Proxy 2│ │Proxy 3│  ...    │
+                                    │  │  OK   │ │  OK   │ │TIMEOUT│         │
+                                    │  └───┬───┘ └───┬───┘ └───────┘         │
+                                    │      │         │                        │
+                                    │      └────┬────┘                        │
+                                    │           │ Health Check (5 min)        │
+┌────────┐     ┌─────────────┐      │           ▼                             │
+│ Client │────▶│ SockStream  │──────┼──▶ Round-Robin / Random                 │
+└────────┘     │             │      │           │                             │
+               │ - CORS      │      │           │ Retry on timeout            │
+               │ - ACL       │      │           ▼                             │
+               │ - Headers   │      │    ┌─────────────┐                      │
+               │ - TLS/ACME  │      │    │ Target Host │                      │
+               └─────────────┘      │    └─────────────┘                      │
+                                    └─────────────────────────────────────────┘
+```
+
+**Основные возможности:**
+
+| Функция | Описание |
+|---------|----------|
+| Proxy Pool | Пул прокси с автоматической ротацией (round-robin / random) |
+| Health Check | Проверка доступности прокси каждые 5 минут |
+| Auto Retry | При таймауте автоматический переход на следующий прокси |
+| Header Rewrite | Перезапись Host, Origin, Referer для совместимости с целевым сервером |
+| Access Control | Фильтрация по IP (allow/block списки, IPv4/IPv6) |
+| TLS | Поддержка сертификатов и автоматический ACME (Let's Encrypt) |
+
+**Key features:**
+
+| Feature | Description |
+|---------|-------------|
+| Proxy Pool | Pool of proxies with automatic rotation (round-robin / random) |
+| Health Check | Proxy availability check every 5 minutes |
+| Auto Retry | Automatic failover to next proxy on timeout |
+| Header Rewrite | Rewrite Host, Origin, Referer for target server compatibility |
+| Access Control | IP filtering (allow/block lists, IPv4/IPv6) |
+| TLS | Certificate support and automatic ACME (Let's Encrypt) |
+
 ## Быстрый старт
 
 ```bash
