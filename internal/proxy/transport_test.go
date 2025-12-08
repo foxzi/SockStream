@@ -1,6 +1,10 @@
 package proxy
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
@@ -421,5 +425,140 @@ func TestProxyPool_AllUnhealthyFallback(t *testing.T) {
 	}
 	if tr == nil {
 		t.Error("Expected fallback transport when all unhealthy")
+	}
+}
+
+func TestIsTimeoutError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "context deadline exceeded",
+			err:  context.DeadlineExceeded,
+			want: true,
+		},
+		{
+			name: "regular error",
+			err:  errors.New("some error"),
+			want: false,
+		},
+		{
+			name: "wrapped timeout",
+			err:  fmt.Errorf("wrapped: %w", context.DeadlineExceeded),
+			want: true,
+		},
+		{
+			name: "net timeout error",
+			err:  &timeoutError{},
+			want: true,
+		},
+		{
+			name: "url error wrapping timeout",
+			err:  &url.Error{Op: "Get", URL: "http://test", Err: context.DeadlineExceeded},
+			want: true,
+		},
+		{
+			name: "url error wrapping non-timeout",
+			err:  &url.Error{Op: "Get", URL: "http://test", Err: errors.New("connection refused")},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isTimeoutError(tt.err); got != tt.want {
+				t.Errorf("isTimeoutError() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// timeoutError implements net.Error for testing
+type timeoutError struct{}
+
+func (e *timeoutError) Error() string   { return "timeout" }
+func (e *timeoutError) Timeout() bool   { return true }
+func (e *timeoutError) Temporary() bool { return true }
+
+func TestProxyPool_SelectProxyIndex(t *testing.T) {
+	cfg := config.ProxyConfig{
+		URLs: []string{
+			"http://proxy1:8080",
+			"http://proxy2:8080",
+			"http://proxy3:8080",
+		},
+		Rotation: "round-robin",
+	}
+
+	pool, err := NewProxyPool(cfg)
+	if err != nil {
+		t.Fatalf("NewProxyPool() error = %v", err)
+	}
+
+	entries := pool.entries
+
+	// Test with empty tried map
+	tried := make(map[int]bool)
+	idx := pool.selectProxyIndex(entries, tried)
+	if idx < 0 || idx >= len(entries) {
+		t.Errorf("selectProxyIndex() returned invalid index: %d", idx)
+	}
+
+	// Test with some tried
+	tried[0] = true
+	tried[1] = true
+	idx = pool.selectProxyIndex(entries, tried)
+	if idx != 2 {
+		t.Errorf("selectProxyIndex() = %d, want 2 (only untried)", idx)
+	}
+
+	// Test with all tried
+	tried[2] = true
+	idx = pool.selectProxyIndex(entries, tried)
+	if idx != -1 {
+		t.Errorf("selectProxyIndex() = %d, want -1 (all tried)", idx)
+	}
+}
+
+func TestProxyPool_GetHealthyEntries(t *testing.T) {
+	cfg := config.ProxyConfig{
+		URLs: []string{
+			"http://proxy1:8080",
+			"http://proxy2:8080",
+			"http://proxy3:8080",
+		},
+	}
+
+	pool, err := NewProxyPool(cfg)
+	if err != nil {
+		t.Fatalf("NewProxyPool() error = %v", err)
+	}
+
+	// All healthy
+	entries := pool.getHealthyEntries()
+	if len(entries) != 3 {
+		t.Errorf("getHealthyEntries() returned %d, want 3", len(entries))
+	}
+
+	// Mark one unhealthy
+	pool.entries[0].setHealthy(false, "test")
+	entries = pool.getHealthyEntries()
+	if len(entries) != 2 {
+		t.Errorf("getHealthyEntries() returned %d, want 2", len(entries))
+	}
+
+	// All unhealthy - should return all as fallback
+	pool.entries[1].setHealthy(false, "test")
+	pool.entries[2].setHealthy(false, "test")
+	entries = pool.getHealthyEntries()
+	if len(entries) != 3 {
+		t.Errorf("getHealthyEntries() fallback returned %d, want 3", len(entries))
 	}
 }

@@ -1,13 +1,17 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -249,13 +253,145 @@ func (p *ProxyPool) logHealthSummary() {
 	)
 }
 
-// RoundTrip implements http.RoundTripper with proxy rotation
+// RoundTrip implements http.RoundTripper with proxy rotation and retry on timeout
 func (p *ProxyPool) RoundTrip(req *http.Request) (*http.Response, error) {
-	tr, err := p.nextTransport()
-	if err != nil {
-		return nil, err
+	entries := p.getHealthyEntries()
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no proxies available")
 	}
-	return tr.RoundTrip(req)
+
+	// For single proxy or direct connection, no retry needed
+	if len(entries) == 1 || p.isDirect {
+		return entries[0].transport.RoundTrip(req)
+	}
+
+	// Buffer request body for potential retries
+	var bodyBytes []byte
+	if req.Body != nil && req.Body != http.NoBody {
+		var err error
+		bodyBytes, err = io.ReadAll(req.Body)
+		req.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("read request body: %w", err)
+		}
+	}
+
+	tried := make(map[int]bool)
+	var lastErr error
+
+	for len(tried) < len(entries) {
+		idx := p.selectProxyIndex(entries, tried)
+		if idx < 0 {
+			break
+		}
+		tried[idx] = true
+		entry := entries[idx]
+
+		// Restore body for retry
+		if bodyBytes != nil {
+			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		}
+
+		resp, err := entry.transport.RoundTrip(req)
+		if err == nil {
+			return resp, nil
+		}
+
+		lastErr = err
+
+		// Only retry on timeout errors
+		if !isTimeoutError(err) {
+			if p.logger != nil {
+				p.logger.Error("proxy request failed (not retrying)",
+					"proxy", fmt.Sprintf("%s://%s", entry.proxy.Type, entry.proxy.Address),
+					"error", err)
+			}
+			return nil, err
+		}
+
+		// Log timeout and mark proxy as unhealthy
+		if p.logger != nil {
+			p.logger.Warn("proxy timeout, trying next",
+				"proxy", fmt.Sprintf("%s://%s", entry.proxy.Type, entry.proxy.Address),
+				"tried", len(tried),
+				"total", len(entries))
+		}
+		entry.setHealthy(false, err.Error())
+	}
+
+	return nil, fmt.Errorf("all proxies failed: %w", lastErr)
+}
+
+func (p *ProxyPool) getHealthyEntries() []*proxyEntry {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	var healthyEntries []*proxyEntry
+	for _, e := range p.entries {
+		if e.isHealthy() {
+			healthyEntries = append(healthyEntries, e)
+		}
+	}
+
+	// Fallback to all entries if none healthy
+	if len(healthyEntries) == 0 {
+		if p.logger != nil && len(p.entries) > 0 {
+			p.logger.Warn("no healthy proxies, using fallback")
+		}
+		return p.entries
+	}
+	return healthyEntries
+}
+
+func (p *ProxyPool) selectProxyIndex(entries []*proxyEntry, tried map[int]bool) int {
+	available := make([]int, 0, len(entries))
+	for i := range entries {
+		if !tried[i] {
+			available = append(available, i)
+		}
+	}
+	if len(available) == 0 {
+		return -1
+	}
+
+	switch p.rotation {
+	case "random":
+		return available[rand.Intn(len(available))]
+	default: // round-robin
+		idx := int(p.counter.Add(1)-1) % len(available)
+		return available[idx]
+	}
+}
+
+// isTimeoutError checks if the error is a timeout
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for context deadline exceeded
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+
+	// Check for os.ErrDeadlineExceeded
+	if errors.Is(err, os.ErrDeadlineExceeded) {
+		return true
+	}
+
+	// Check for net.Error timeout
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+
+	// Check for url.Error wrapping a timeout
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return isTimeoutError(urlErr.Err)
+	}
+
+	return false
 }
 
 func (p *ProxyPool) nextTransport() (http.RoundTripper, error) {
