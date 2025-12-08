@@ -20,11 +20,21 @@ host_name: example.com
 target: https://target.example.com
 
 proxy:
+  # Option 1: Single proxy (legacy)
   type: socks5
   address: 127.0.0.1:1080
   auth:
     username: user
     password: pass
+
+  # Option 2: Proxy pool with URL format (recommended)
+  urls:
+    - socks5://user:pass@proxy1:1080
+    - socks5://proxy2:1080
+    - http://user:pass@httpproxy:8080
+    - https://secureproxy:443
+  rotation: round-robin  # or "random"
+
   timeouts:
     connect_seconds: 10
     idle_seconds: 30
@@ -85,6 +95,8 @@ Prefix: `SOCKSTREAM_`
 | `SOCKSTREAM_PROXY_ADDRESS` | Proxy server address |
 | `SOCKSTREAM_PROXY_USERNAME` | Proxy username |
 | `SOCKSTREAM_PROXY_PASSWORD` | Proxy password |
+| `SOCKSTREAM_PROXY_URLS` | List of proxy URLs (comma-separated) |
+| `SOCKSTREAM_PROXY_ROTATION` | Rotation strategy: `round-robin`, `random` |
 | `SOCKSTREAM_ALLOW_IPS` | Allowed CIDRs (comma-separated) |
 | `SOCKSTREAM_BLOCK_IPS` | Blocked CIDRs (comma-separated) |
 | `SOCKSTREAM_CORS_ORIGINS` | Allowed CORS origins |
@@ -124,6 +136,47 @@ Prefix: `SOCKSTREAM_`
 | `http` | HTTP proxy |
 | `https` | HTTPS proxy |
 | `socks5` | SOCKS5 proxy |
+
+## Proxy Pool
+
+SockStream supports a proxy pool with automatic rotation.
+
+### URL Format
+
+```
+scheme://[user:password@]host:port
+```
+
+Examples:
+- `socks5://proxy.example.com:1080`
+- `socks5://user:pass@proxy.example.com:1080`
+- `http://admin:secret@httpproxy.local:8080`
+- `https://secureproxy.com:443`
+
+### Rotation Strategies
+
+| Strategy | Description |
+|----------|-------------|
+| `round-robin` | Sequential rotation (default) |
+| `random` | Random selection |
+
+### Usage Example
+
+```yaml
+proxy:
+  urls:
+    - socks5://user:pass@proxy1.example.com:1080
+    - socks5://proxy2.example.com:1080
+    - http://httpproxy.example.com:8080
+  rotation: round-robin
+```
+
+Via environment variables:
+
+```bash
+export SOCKSTREAM_PROXY_URLS="socks5://proxy1:1080,http://proxy2:8080"
+export SOCKSTREAM_PROXY_ROTATION="random"
+```
 
 ## Access Control
 

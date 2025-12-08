@@ -56,13 +56,13 @@ func main() {
 		Level: parseLogLevel(cfg.Logging.Level),
 	}))
 
-	transport, err := proxy.NewTransport(cfg.Proxy)
+	proxyPool, err := proxy.NewProxyPool(cfg.Proxy)
 	if err != nil {
-		logger.Error("failed to create transport", "error", err)
+		logger.Error("failed to create proxy pool", "error", err)
 		os.Exit(1)
 	}
 
-	reverseProxy := proxy.NewReverseProxy(targetURL, cfg, transport, logger)
+	reverseProxy := proxy.NewReverseProxy(targetURL, cfg, proxyPool, logger)
 	srv, err := server.New(cfg, logger, reverseProxy)
 	if err != nil {
 		logger.Error("failed to init server", "error", err)
@@ -73,7 +73,9 @@ func main() {
 	defer stop()
 
 	logger.Info("starting server", "listen", cfg.Listen, "target", cfg.Target)
-	if cfg.Proxy.Type != "" {
+	if len(cfg.Proxy.URLs) > 0 {
+		logger.Info("using proxy pool", "count", proxyPool.Size(), "rotation", cfg.Proxy.Rotation)
+	} else if cfg.Proxy.Type != "" && cfg.Proxy.Type != "direct" {
 		logger.Info("using upstream proxy", "type", cfg.Proxy.Type, "address", cfg.Proxy.Address)
 	}
 	if cfg.TLS.HasCertificates() {

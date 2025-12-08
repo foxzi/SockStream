@@ -20,11 +20,21 @@ host_name: example.com
 target: https://target.example.com
 
 proxy:
+  # Вариант 1: Один прокси (legacy)
   type: socks5
   address: 127.0.0.1:1080
   auth:
     username: user
     password: pass
+
+  # Вариант 2: Пул прокси с URL форматом (рекомендуется)
+  urls:
+    - socks5://user:pass@proxy1:1080
+    - socks5://proxy2:1080
+    - http://user:pass@httpproxy:8080
+    - https://secureproxy:443
+  rotation: round-robin  # или "random"
+
   timeouts:
     connect_seconds: 10
     idle_seconds: 30
@@ -85,6 +95,8 @@ tls:
 | `SOCKSTREAM_PROXY_ADDRESS` | Адрес прокси-сервера |
 | `SOCKSTREAM_PROXY_USERNAME` | Имя пользователя прокси |
 | `SOCKSTREAM_PROXY_PASSWORD` | Пароль прокси |
+| `SOCKSTREAM_PROXY_URLS` | Список прокси URL (через запятую) |
+| `SOCKSTREAM_PROXY_ROTATION` | Стратегия ротации: `round-robin`, `random` |
 | `SOCKSTREAM_ALLOW_IPS` | Разрешённые CIDR (через запятую) |
 | `SOCKSTREAM_BLOCK_IPS` | Заблокированные CIDR (через запятую) |
 | `SOCKSTREAM_CORS_ORIGINS` | Разрешённые источники CORS |
@@ -124,6 +136,47 @@ tls:
 | `http` | HTTP прокси |
 | `https` | HTTPS прокси |
 | `socks5` | SOCKS5 прокси |
+
+## Пул прокси (Proxy Pool)
+
+SockStream поддерживает пул прокси с автоматической ротацией.
+
+### URL формат
+
+```
+scheme://[user:password@]host:port
+```
+
+Примеры:
+- `socks5://proxy.example.com:1080`
+- `socks5://user:pass@proxy.example.com:1080`
+- `http://admin:secret@httpproxy.local:8080`
+- `https://secureproxy.com:443`
+
+### Стратегии ротации
+
+| Стратегия | Описание |
+|-----------|----------|
+| `round-robin` | Последовательный перебор (по умолчанию) |
+| `random` | Случайный выбор |
+
+### Пример использования
+
+```yaml
+proxy:
+  urls:
+    - socks5://user:pass@proxy1.example.com:1080
+    - socks5://proxy2.example.com:1080
+    - http://httpproxy.example.com:8080
+  rotation: round-robin
+```
+
+Через переменные окружения:
+
+```bash
+export SOCKSTREAM_PROXY_URLS="socks5://proxy1:1080,http://proxy2:8080"
+export SOCKSTREAM_PROXY_ROTATION="random"
+```
 
 ## Контроль доступа
 

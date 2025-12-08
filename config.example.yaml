@@ -1,18 +1,35 @@
 listen: 0.0.0.0:8080
 host_name: example.com
 target: https://target.com
+
 proxy:
-  type: socks5
-  address: 127.0.0.1:1080
+  # Option 1: Single proxy (legacy format)
+  # type: socks5
+  # address: 127.0.0.1:1080
   # auth:
   #   username: user
   #   password: pass
+
+  # Option 2: Proxy pool with URL format (recommended)
+  urls:
+    - socks5://user:pass@proxy1.example.com:1080
+    - socks5://proxy2.example.com:1080
+    - http://user:pass@httpproxy.example.com:8080
+    - https://secureproxy.example.com:443
+  rotation: round-robin  # or "random"
+
+  timeouts:
+    connect_seconds: 10
+    idle_seconds: 30
+
 cors:
   allowed_origins:
     - "*"
+
 access:
   allow:
     - 0.0.0.0/0
+
 headers:
   rewrite_host: true
   rewrite_origin: true
