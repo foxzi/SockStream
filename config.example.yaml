@@ -1,0 +1,21 @@
+listen: 0.0.0.0:8080
+host_name: example.com
+target: https://target.com
+proxy:
+  type: socks5
+  address: 127.0.0.1:1080
+  # auth:
+  #   username: user
+  #   password: pass
+cors:
+  allowed_origins:
+    - "*"
+access:
+  allow:
+    - 0.0.0.0/0
+headers:
+  rewrite_host: true
+  rewrite_origin: true
+  rewrite_referer: true
+  add:
+    X-Forwarded-Proto: https
