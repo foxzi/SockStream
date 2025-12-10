@@ -123,10 +123,11 @@ type CORSConfig struct {
 }
 
 type HeaderConfig struct {
-	RewriteHost    bool              `yaml:"rewrite_host" toml:"rewrite_host"`
-	RewriteOrigin  bool              `yaml:"rewrite_origin" toml:"rewrite_origin"`
-	RewriteReferer bool              `yaml:"rewrite_referer" toml:"rewrite_referer"`
-	Add            map[string]string `yaml:"add" toml:"add"`
+	RewriteHost    bool     `yaml:"rewrite_host" toml:"rewrite_host"`
+	RewriteOrigin  bool     `yaml:"rewrite_origin" toml:"rewrite_origin"`
+	RewriteReferer bool     `yaml:"rewrite_referer" toml:"rewrite_referer"`
+	Add            []string `yaml:"add" toml:"add"`
+	Delete         []string `yaml:"delete" toml:"delete"`
 }
 
 type Logging struct {
@@ -199,7 +200,6 @@ func DefaultConfig() Config {
 			RewriteHost:    true,
 			RewriteOrigin:  true,
 			RewriteReferer: true,
-			Add:            map[string]string{},
 		},
 		Logging: Logging{Level: "info"},
 		TLS: TLSConfig{
@@ -311,11 +311,8 @@ func applyOverrides(cfg *Config, overrides Overrides) {
 		cfg.CORS.AllowedOrigins = overrides.CORSOrigins
 	}
 	if len(overrides.AddHeaders) > 0 {
-		if cfg.Headers.Add == nil {
-			cfg.Headers.Add = map[string]string{}
-		}
 		for k, v := range overrides.AddHeaders {
-			cfg.Headers.Add[k] = v
+			cfg.Headers.Add = append(cfg.Headers.Add, k+": "+v)
 		}
 	}
 	if overrides.DisableRewriteHost {
@@ -386,13 +383,10 @@ func applyEnv(cfg *Config, prefix string) {
 		cfg.CORS.AllowedOrigins = splitAndClean(v)
 	}
 	if v, ok := get("ADD_HEADERS"); ok {
-		if cfg.Headers.Add == nil {
-			cfg.Headers.Add = map[string]string{}
-		}
 		for _, kv := range splitAndClean(v) {
 			parts := strings.SplitN(kv, "=", 2)
 			if len(parts) == 2 {
-				cfg.Headers.Add[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+				cfg.Headers.Add = append(cfg.Headers.Add, strings.TrimSpace(parts[0])+": "+strings.TrimSpace(parts[1]))
 			}
 		}
 	}

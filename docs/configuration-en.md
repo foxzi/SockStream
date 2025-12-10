@@ -65,8 +65,11 @@ headers:
   rewrite_origin: true
   rewrite_referer: true
   add:
-    X-Forwarded-Proto: https
-    X-Custom-Header: value
+    - "X-Forwarded-Proto: https"
+    - "X-Custom-Header: value"
+  delete:
+    - X-Forwarded-For
+    - X-Real-IP
 
 logging:
   level: info
@@ -221,14 +224,30 @@ The `add` section allows adding custom headers to every request:
 
 ```yaml
 headers:
-  rewrite_host: true
-  rewrite_origin: true
-  rewrite_referer: true
   add:
-    X-Forwarded-Proto: https
-    X-Custom-Header: my-value
-    Authorization: Bearer token123
+    - "X-Forwarded-Proto: https"
+    - "X-Custom-Header: my-value"
+    - "Authorization: Bearer token123"
 ```
+
+### Deleting Headers
+
+The `delete` section allows removing headers from the request before forwarding to the target server:
+
+```yaml
+headers:
+  delete:
+    - X-Forwarded-For
+    - X-Real-IP
+    - X-Custom-Header
+```
+
+**Why is this needed:** Deleting headers is useful when:
+- You need to hide the client's real IP from the target server (`X-Forwarded-For`, `X-Real-IP`)
+- You need to remove headers added by intermediate proxies
+- You need to clean up service headers before proxying
+
+**Processing order:** `delete` is executed first, then `rewrite_*`, then `add`.
 
 ## TLS
 

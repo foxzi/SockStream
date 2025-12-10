@@ -20,6 +20,7 @@ func NewReverseProxy(target *url.URL, cfg config.Config, transport http.RoundTri
 	origDirector := proxy.Director
 	proxy.Director = func(r *http.Request) {
 		origDirector(r)
+		applyDeleteHeaders(r, cfg.Headers.Delete)
 		applyRewrites(r, target, cfg.Headers)
 		applyAddHeaders(r, cfg.Headers.Add)
 		if cfg.HostName != "" {
@@ -48,11 +49,25 @@ func applyRewrites(r *http.Request, target *url.URL, cfg config.HeaderConfig) {
 	}
 }
 
-func applyAddHeaders(r *http.Request, headers map[string]string) {
-	for k, v := range headers {
-		if strings.TrimSpace(k) == "" {
+func applyAddHeaders(r *http.Request, headers []string) {
+	for _, h := range headers {
+		parts := strings.SplitN(h, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		k := strings.TrimSpace(parts[0])
+		v := strings.TrimSpace(parts[1])
+		if k == "" {
 			continue
 		}
 		r.Header.Set(k, v)
+	}
+}
+
+func applyDeleteHeaders(r *http.Request, headers []string) {
+	for _, h := range headers {
+		if h = strings.TrimSpace(h); h != "" {
+			r.Header.Del(h)
+		}
 	}
 }

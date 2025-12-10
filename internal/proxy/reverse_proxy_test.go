@@ -131,61 +131,62 @@ func TestApplyRewrites(t *testing.T) {
 func TestApplyAddHeaders(t *testing.T) {
 	tests := []struct {
 		name        string
-		headers     map[string]string
+		headers     []string
 		wantHeaders map[string]string
 	}{
 		{
 			name:        "empty headers",
-			headers:     map[string]string{},
+			headers:     []string{},
 			wantHeaders: map[string]string{},
 		},
 		{
-			name: "add single header",
-			headers: map[string]string{
-				"X-Custom-Header": "value",
-			},
+			name:    "add single header",
+			headers: []string{"X-Custom-Header: value"},
 			wantHeaders: map[string]string{
 				"X-Custom-Header": "value",
 			},
 		},
 		{
-			name: "add multiple headers",
-			headers: map[string]string{
-				"X-Custom-Header": "value1",
-				"X-Another":       "value2",
-			},
+			name:    "add multiple headers",
+			headers: []string{"X-Custom-Header: value1", "X-Another: value2"},
 			wantHeaders: map[string]string{
 				"X-Custom-Header": "value1",
 				"X-Another":       "value2",
 			},
 		},
 		{
-			name: "skip empty key",
-			headers: map[string]string{
-				"":                "value1",
-				"X-Custom-Header": "value2",
+			name:    "skip invalid format",
+			headers: []string{"no-colon", "X-Custom-Header: value"},
+			wantHeaders: map[string]string{
+				"X-Custom-Header": "value",
 			},
+		},
+		{
+			name:    "skip empty key",
+			headers: []string{": value1", "X-Custom-Header: value2"},
 			wantHeaders: map[string]string{
 				"X-Custom-Header": "value2",
 			},
 		},
 		{
-			name: "skip whitespace key",
-			headers: map[string]string{
-				"   ":             "value1",
-				"X-Custom-Header": "value2",
-			},
+			name:    "allow empty value",
+			headers: []string{"X-Custom-Header:"},
 			wantHeaders: map[string]string{
-				"X-Custom-Header": "value2",
+				"X-Custom-Header": "",
 			},
 		},
 		{
-			name: "allow empty value",
-			headers: map[string]string{
-				"X-Custom-Header": "",
-			},
+			name:    "trim spaces",
+			headers: []string{"  X-Custom-Header  :  value  "},
 			wantHeaders: map[string]string{
-				"X-Custom-Header": "",
+				"X-Custom-Header": "value",
+			},
+		},
+		{
+			name:    "value with colon",
+			headers: []string{"Authorization: Bearer: token:123"},
+			wantHeaders: map[string]string{
+				"Authorization": "Bearer: token:123",
 			},
 		},
 	}

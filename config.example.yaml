@@ -36,4 +36,7 @@ headers:
   rewrite_origin: true
   rewrite_referer: true
   add:
-    X-Forwarded-Proto: https
+    - "X-Forwarded-Proto: https"
+  delete:
+    - X-Forwarded-For
+    - X-Real-IP

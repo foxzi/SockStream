@@ -255,8 +255,15 @@ func TestApplyOverrides(t *testing.T) {
 	if cfg.TLS.ACME.Enabled != true {
 		t.Error("ACME should be enabled when ACMEDomain is set")
 	}
-	if cfg.Headers.Add["X-Custom"] != "value" {
-		t.Errorf("Headers.Add[X-Custom] = %q, want %q", cfg.Headers.Add["X-Custom"], "value")
+	found := false
+	for _, h := range cfg.Headers.Add {
+		if h == "X-Custom: value" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Headers.Add should contain 'X-Custom: value', got %v", cfg.Headers.Add)
 	}
 }
 
@@ -348,8 +355,15 @@ func TestApplyEnv(t *testing.T) {
 	if len(cfg.Access.AllowCIDRs) != 2 {
 		t.Errorf("AllowCIDRs len = %d, want 2", len(cfg.Access.AllowCIDRs))
 	}
-	if cfg.Headers.Add["X-Env"] != "value1" {
-		t.Errorf("Headers.Add[X-Env] = %q, want %q", cfg.Headers.Add["X-Env"], "value1")
+	foundEnv := false
+	for _, h := range cfg.Headers.Add {
+		if h == "X-Env: value1" {
+			foundEnv = true
+			break
+		}
+	}
+	if !foundEnv {
+		t.Errorf("Headers.Add should contain 'X-Env: value1', got %v", cfg.Headers.Add)
 	}
 }
 

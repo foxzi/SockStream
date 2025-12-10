@@ -65,8 +65,11 @@ headers:
   rewrite_origin: true
   rewrite_referer: true
   add:
-    X-Forwarded-Proto: https
-    X-Custom-Header: value
+    - "X-Forwarded-Proto: https"
+    - "X-Custom-Header: value"
+  delete:
+    - X-Forwarded-For
+    - X-Real-IP
 
 logging:
   level: info
@@ -221,14 +224,30 @@ export SOCKSTREAM_PROXY_ROTATION="random"
 
 ```yaml
 headers:
-  rewrite_host: true
-  rewrite_origin: true
-  rewrite_referer: true
   add:
-    X-Forwarded-Proto: https
-    X-Custom-Header: my-value
-    Authorization: Bearer token123
+    - "X-Forwarded-Proto: https"
+    - "X-Custom-Header: my-value"
+    - "Authorization: Bearer token123"
 ```
+
+### Удаление заголовков
+
+Секция `delete` позволяет удалить заголовки из запроса перед отправкой на целевой сервер:
+
+```yaml
+headers:
+  delete:
+    - X-Forwarded-For
+    - X-Real-IP
+    - X-Custom-Header
+```
+
+**Зачем это нужно:** Удаление заголовков полезно когда:
+- Нужно скрыть реальный IP клиента от целевого сервера (`X-Forwarded-For`, `X-Real-IP`)
+- Нужно убрать заголовки, добавленные промежуточными прокси
+- Требуется очистить служебные заголовки перед проксированием
+
+**Порядок обработки:** `delete` выполняется первым, затем `rewrite_*`, затем `add`.
 
 ## TLS
 
