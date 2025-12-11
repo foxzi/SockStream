@@ -25,6 +25,7 @@ func NewReverseProxy(target *url.URL, cfg config.Config, transport http.RoundTri
 		applyAddHeaders(r, cfg.Headers.Add)
 		if cfg.HostName != "" {
 			r.Host = cfg.HostName
+			r.Header.Set("Host", cfg.HostName)
 		}
 	}
 
