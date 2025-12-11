@@ -27,6 +27,8 @@ func NewReverseProxy(target *url.URL, cfg config.Config, transport http.RoundTri
 			r.Host = cfg.HostName
 			r.Header.Set("Host", cfg.HostName)
 		}
+		// Delete headers again after origDirector may have added X-Forwarded-For
+		applyDeleteHeaders(r, cfg.Headers.Delete)
 	}
 
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {

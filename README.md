@@ -61,16 +61,16 @@ docker run -p 8080:8080 ghcr.io/foxzi/sockstream -target https://example.com
 ### Debian/Ubuntu
 
 ```bash
-wget https://github.com/foxzi/SockStream/releases/download/v0.1.3/sockstream_0.1.3_amd64.deb
-sudo dpkg -i sockstream_0.1.3_amd64.deb
+wget https://github.com/foxzi/SockStream/releases/download/v0.1.4/sockstream_0.1.4_amd64.deb
+sudo dpkg -i sockstream_0.1.4_amd64.deb
 sudo systemctl enable --now sockstream
 ```
 
 ### RHEL/CentOS/Fedora
 
 ```bash
-wget https://github.com/foxzi/SockStream/releases/download/v0.1.3/sockstream-0.1.3-1.x86_64.rpm
-sudo rpm -i sockstream-0.1.3-1.x86_64.rpm
+wget https://github.com/foxzi/SockStream/releases/download/v0.1.4/sockstream-0.1.4-1.x86_64.rpm
+sudo rpm -i sockstream-0.1.4-1.x86_64.rpm
 sudo systemctl enable --now sockstream
 ```
 
