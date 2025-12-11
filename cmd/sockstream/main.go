@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -16,8 +17,15 @@ import (
 	"sockstream/internal/server"
 )
 
+var version = "dev"
+
 func main() {
 	flags := parseFlags()
+
+	if flags.showVersion {
+		fmt.Println("sockstream", version)
+		os.Exit(0)
+	}
 
 	overrides := config.Overrides{
 		Listen:   flags.listen,
@@ -129,6 +137,7 @@ type cliFlags struct {
 	acmeEmail          string
 	acmeCache          string
 	disableRewriteHost bool
+	showVersion        bool
 }
 
 func parseFlags() cliFlags {
@@ -154,6 +163,7 @@ func parseFlags() cliFlags {
 	flag.StringVar(&f.acmeEmail, "acme-email", "", "ACME registration email")
 	flag.StringVar(&f.acmeCache, "acme-cache", "", "ACME cache directory")
 	flag.BoolVar(&f.disableRewriteHost, "no-rewrite-host", false, "disable rewriting Host header to target")
+	flag.BoolVar(&f.showVersion, "version", false, "show version and exit")
 	flag.Parse()
 
 	f.allowCIDR = allowCIDR.values

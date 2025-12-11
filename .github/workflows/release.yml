@@ -104,6 +104,10 @@ jobs:
            header rewriting, CORS, and automatic proxy failover.
           EOF
 
+          cat > ${PKG_ROOT}/DEBIAN/conffiles << EOF
+          /etc/sockstream/config.yaml
+          EOF
+
           cat > ${PKG_ROOT}/lib/systemd/system/sockstream.service << EOF
           [Unit]
           Description=SockStream Reverse Proxy
