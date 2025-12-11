@@ -20,15 +20,19 @@ func NewReverseProxy(target *url.URL, cfg config.Config, transport http.RoundTri
 	origDirector := proxy.Director
 	proxy.Director = func(r *http.Request) {
 		origDirector(r)
-		applyDeleteHeaders(r, cfg.Headers.Delete)
 		applyRewrites(r, target, cfg.Headers)
 		applyAddHeaders(r, cfg.Headers.Add)
 		if cfg.HostName != "" {
 			r.Host = cfg.HostName
 			r.Header.Set("Host", cfg.HostName)
 		}
-		// Delete headers again after origDirector may have added X-Forwarded-For
-		applyDeleteHeaders(r, cfg.Headers.Delete)
+		// Set headers to nil to prevent ServeHTTP from adding them
+		// (ServeHTTP checks for nil and skips adding X-Forwarded-For if nil)
+		for _, h := range cfg.Headers.Delete {
+			if h = strings.TrimSpace(h); h != "" {
+				r.Header[http.CanonicalHeaderKey(h)] = nil
+			}
+		}
 	}
 
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
@@ -67,10 +71,3 @@ func applyAddHeaders(r *http.Request, headers []string) {
 	}
 }
 
-func applyDeleteHeaders(r *http.Request, headers []string) {
-	for _, h := range headers {
-		if h = strings.TrimSpace(h); h != "" {
-			r.Header.Del(h)
-		}
-	}
-}
